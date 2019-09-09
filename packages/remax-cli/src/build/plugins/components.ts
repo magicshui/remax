@@ -84,7 +84,7 @@ export default (adapter: Adapter) => () => ({
         }
 
         props.forEach(prop => {
-          if (components[id].props.findIndex(item => item === prop) !== -1) {
+          if (components[id].props.includes(prop)) {
             return;
           }
 

@@ -10,14 +10,19 @@ import getEntries from '../../getEntries';
 import { Adapter } from '../adapters';
 import { Context } from '../../types';
 import winPath from '../../winPath';
+import { getNativeComponents } from './nativeComponents/babelPlugin';
 
-async function createTemplate(pageFile: string, adapter: Adapter) {
+async function createTemplate(
+  pageFile: string,
+  adapter: Adapter,
+  options: RemaxOptions
+) {
   const fileName = `${path.dirname(pageFile)}/${path.basename(
     pageFile,
     path.extname(pageFile)
   )}${adapter.extensions.template}`;
 
-  const options: { [props: string]: any } = {
+  const renderOptions: { [props: string]: any } = {
     baseTemplate: winPath(
       path.relative(
         path.dirname(pageFile),
@@ -27,7 +32,7 @@ async function createTemplate(pageFile: string, adapter: Adapter) {
   };
 
   if (adapter.extensions.jsHelper) {
-    options.jsHelper = winPath(
+    renderOptions.jsHelper = winPath(
       path.relative(
         path.dirname(pageFile),
         `helper${adapter.extensions.jsHelper}`
@@ -35,7 +40,15 @@ async function createTemplate(pageFile: string, adapter: Adapter) {
     );
   }
 
-  const code: string = await ejs.renderFile(adapter.templates.page, options);
+  const components = getComponents();
+  const nativeComponents = Object.values(getNativeComponents());
+
+  const code: string = await ejs.renderFile(adapter.templates.page, {
+    ...renderOptions,
+    nativeComponents,
+    components,
+    depth: options.UNSAFE_wechatTemplateDepth,
+  });
 
   return {
     fileName,
@@ -45,23 +58,30 @@ async function createTemplate(pageFile: string, adapter: Adapter) {
 }
 
 async function createHelperFile(adapter: Adapter) {
+  if (!adapter.templates.jsHelper) {
+    return null;
+  }
+
   const code: string = await ejs.renderFile(adapter.templates.jsHelper, {
     target: adapter.name,
   });
 
   return {
     fileName: `helper${adapter.extensions.jsHelper}`,
-    isAsset: true as true,
+    isAsset: true as const,
     source: code,
   };
 }
 
 async function createBaseTemplate(adapter: Adapter, options: RemaxOptions) {
   const components = getComponents();
+  const nativeComponents = Object.values(getNativeComponents());
+
   let code: string = await ejs.renderFile(
     adapter.templates.base,
     {
       components,
+      nativeComponents,
       depth: options.UNSAFE_wechatTemplateDepth,
     },
     {
@@ -97,6 +117,21 @@ function createAppManifest(
   };
 }
 
+function createPageUsingComponents(configFilePath: string) {
+  const nativeComponents = getNativeComponents();
+  const usingComponents: { [key: string]: string } = {};
+  for (const [key, value] of Object.entries(nativeComponents)) {
+    usingComponents[value.id] = path
+      .relative(
+        path.dirname(configFilePath),
+        key.replace(/node_modules/, 'src/npm')
+      )
+      .replace(/\.js$/, '');
+  }
+
+  return usingComponents;
+}
+
 function createPageManifest(
   options: RemaxOptions,
   file: string,
@@ -110,18 +145,19 @@ function createPageManifest(
     options.cwd,
     path.join('src', configFile)
   );
-  if (fs.existsSync(configFilePath)) {
-    return {
-      fileName: manifestFile,
-      isAsset: true as true,
-      source: JSON.stringify(readManifest(configFilePath, target), null, 2),
-    };
-  }
+  const usingComponents = createPageUsingComponents(configFilePath);
+  const config = readManifest(configFilePath, target);
+  config.usingComponents = usingComponents;
+
   if (context) {
     const pageConfig = context.pages.find((p: any) => p.path === page.path);
     if (pageConfig) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { path, ...config } = pageConfig;
+      config.usingComponents = {
+        ...(config.usingComponents || {}),
+        ...usingComponents,
+      };
       return {
         fileName: manifestFile,
         isAsset: true as true,
@@ -129,6 +165,12 @@ function createPageManifest(
       };
     }
   }
+
+  return {
+    fileName: manifestFile,
+    isAsset: true as true,
+    source: JSON.stringify(config, null, 2),
+  };
 }
 
 function isRemaxEntry(chunk: any): chunk is OutputChunk {
@@ -173,8 +215,9 @@ export default function template(
       const template = await createBaseTemplate(adapter, options);
       bundle[template.fileName] = template;
 
-      if (adapter.templates.jsHelper) {
-        const helperFile = await createHelperFile(adapter);
+      const helperFile = await createHelperFile(adapter);
+
+      if (helperFile) {
         bundle[helperFile.fileName] = helperFile;
       }
 
@@ -189,7 +232,7 @@ export default function template(
             const filePath = Object.keys(chunk.modules)[0];
             const page = pages.find(p => p.file === filePath);
             if (page) {
-              const template = await createTemplate(file, adapter);
+              const template = await createTemplate(file, adapter, options);
               bundle[template.fileName] = template;
               const config = await createPageManifest(
                 options,

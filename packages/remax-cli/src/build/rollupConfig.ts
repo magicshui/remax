@@ -30,6 +30,8 @@ import adapters, { Adapter } from './adapters';
 import { Context, Env } from '../types';
 import namedExports from 'named-exports-db';
 import fixRegeneratorRuntime from './plugins/fixRegeneratorRuntime';
+import nativeComponents from './plugins/nativeComponents/index';
+import nativeComponentsBabelPlugin from './plugins/nativeComponents/babelPlugin';
 
 export default function rollupConfig(
   options: RemaxOptions,
@@ -119,9 +121,39 @@ export default function rollupConfig(
       publicPath: '/',
       include: ['**/*.svg', '**/*.png', '**/*.jpg', '**/*.jpeg', '**/*.gif'],
     }),
+    resolve({
+      dedupe: [
+        'react',
+        'object-assign',
+        'prop-types',
+        'scheduler',
+        'react-reconciler',
+      ],
+      extensions: [
+        '.mjs',
+        '.js',
+        '.jsx',
+        '.json',
+        '.ts',
+        '.tsx',
+        // adapter.extensions.jsHelper,
+      ],
+      customResolveOptions: {
+        moduleDirectory: 'node_modules',
+      },
+    }),
     commonjs({
       include: /node_modules/,
       namedExports,
+      extensions: [
+        '.mjs',
+        '.js',
+        '.jsx',
+        '.json',
+        '.ts',
+        '.tsx',
+        adapter.extensions.jsHelper || '',
+      ],
     }),
     stub({
       modules: stubModules,
@@ -129,19 +161,31 @@ export default function rollupConfig(
     babel({
       include: entries.pages.map(p => p.file),
       extensions: ['.js', '.jsx', '.ts', '.tsx'],
-      plugins: [page, ...babelConfig.plugins],
+      plugins: [
+        nativeComponentsBabelPlugin(options, adapter),
+        page,
+        ...babelConfig.plugins,
+      ],
       presets: babelConfig.presets,
     }),
     babel({
       include: entries.app,
       extensions: ['.js', '.jsx', '.ts', '.tsx'],
-      plugins: [app, ...babelConfig.plugins],
+      plugins: [
+        // nativeComponentsBabelPlugin(options, adapter),
+        app,
+        ...babelConfig.plugins,
+      ],
       presets: babelConfig.presets,
     }),
     babel({
       babelrc: false,
       extensions: ['.js', '.jsx', '.ts', '.tsx'],
-      plugins: [components(adapter), ...babelConfig.plugins],
+      plugins: [
+        nativeComponentsBabelPlugin(options, adapter),
+        components(adapter),
+        ...babelConfig.plugins,
+      ],
       presets: babelConfig.presets.concat([
         require.resolve('@babel/preset-react'),
       ]),
@@ -157,19 +201,7 @@ export default function rollupConfig(
         'process.env': JSON.stringify(envReplacement),
       },
     }),
-    resolve({
-      dedupe: [
-        'react',
-        'object-assign',
-        'prop-types',
-        'scheduler',
-        'react-reconciler',
-      ],
-      extensions: ['.mjs', '.js', '.jsx', '.json', '.ts', '.tsx'],
-      customResolveOptions: {
-        moduleDirectory: 'node_modules',
-      },
-    }),
+    nativeComponents(options, adapter),
     rename({
       include: 'src/**',
       map: input => {
@@ -207,7 +239,7 @@ export default function rollupConfig(
     rename({
       matchAll: true,
       map: input => {
-        return (
+        let replaceInput =
           input &&
           input
             // npm 包可能会有 jsx
@@ -218,13 +250,13 @@ export default function rollupConfig(
             .replace(/\.scss$/, '.scss.js')
             .replace(/\.styl$/, '.styl.js')
             .replace(/node_modules/g, 'npm')
-            .replace(/\.js_commonjs-proxy$/, '.js_commonjs-proxy.js')
-            // 支付宝小程序不允许目录带 @
-            .replace(
-              /@(.+?)\/(.+)$/,
-              (match, group1, group2) => `_${group1}/${group2}`
-            )
-        );
+            .replace(/\.js_commonjs-proxy$/, '.js_commonjs-proxy.js');
+
+        if (envReplacement.REMAX_PLATFORM === 'alipay') {
+          replaceInput = replaceInput.replace(/@/g, '_');
+        }
+
+        return replaceInput;
       },
     }),
     removeSrc({}),
