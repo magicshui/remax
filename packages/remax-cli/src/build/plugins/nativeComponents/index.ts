@@ -47,7 +47,7 @@ export default (options: RemaxOptions, adapter: Adapter): Plugin => {
           .replace(/src/, '');
 
         bundle[bundleFileName] = {
-          type: 'asset',
+          // type: 'asset',
           source: readFileSync(id),
           fileName: bundleFileName,
           isAsset: true,
