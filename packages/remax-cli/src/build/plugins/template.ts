@@ -50,7 +50,7 @@ async function createTemplate(
   });
 
   return {
-    type: 'asset',
+    type: 'asset' as const,
     fileName,
     isAsset: true as true,
     source: code,
@@ -67,7 +67,7 @@ async function createHelperFile(adapter: Adapter) {
   });
 
   return {
-    type: 'asset',
+    type: 'asset' as const,
     fileName: `helper${adapter.extensions.jsHelper}`,
     isAsset: true as const,
     source: code,
@@ -102,7 +102,7 @@ async function createBaseTemplate(adapter: Adapter, options: RemaxOptions) {
   }
 
   return {
-    type: 'asset',
+    type: 'asset' as const,
     fileName: `base${adapter.extensions.template}`,
     isAsset: true as true,
     source: code,
@@ -118,7 +118,7 @@ function createAppManifest(
     ? { ...context.app, pages: context.pages.map(p => p.path) }
     : readManifest(path.resolve(options.cwd, 'src/app.config.js'), target);
   return {
-    type: 'asset',
+    type: 'asset' as const,
     fileName: 'app.json',
     isAsset: true as true,
     source: JSON.stringify(config, null, 2),
@@ -170,6 +170,7 @@ function createPageManifest(
         ...usingComponents,
       };
       return {
+        type: 'asset' as const,
         fileName: manifestFile,
         isAsset: true as true,
         source: JSON.stringify(config, null, 2),
@@ -178,7 +179,7 @@ function createPageManifest(
   }
 
   return {
-    type: 'asset',
+    type: 'asset' as const,
     fileName: manifestFile,
     isAsset: true as true,
     source: JSON.stringify(config, null, 2),
