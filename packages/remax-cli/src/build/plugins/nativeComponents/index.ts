@@ -47,7 +47,7 @@ export default (options: RemaxOptions, adapter: Adapter): Plugin => {
           .replace(/src/, '');
 
         bundle[bundleFileName] = {
-          // type: 'asset',
+          type: 'asset',
           source: readFileSync(id),
           fileName: bundleFileName,
           isAsset: true,
@@ -61,11 +61,13 @@ export default (options: RemaxOptions, adapter: Adapter): Plugin => {
           return;
         }
 
-        const id = module.facadeModuleId;
+        let id = module.facadeModuleId;
 
         if (!id) {
           return;
         }
+
+        id = id.replace(/npm/, 'node_modules');
 
         const nativeComponents = getNativeComponents();
         const usingComponents = getUsingComponents();
@@ -85,7 +87,7 @@ export default (options: RemaxOptions, adapter: Adapter): Plugin => {
             }
 
             const usingComponentPath = path.join(
-              path.dirname(id),
+              path.dirname(id as string),
               params[0].value
             );
 
